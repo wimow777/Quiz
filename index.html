@@ -60,7 +60,6 @@
   .header-title { font-size: 17px; font-weight: 700; }
   .header-sub { font-size: 12px; color: var(--muted); font-weight: 400; }
 
-  /* Cronómetro: se oculta por defecto (solo visible en quiz y resultados) */
   .timer-box {
     font-family: 'JetBrains Mono', monospace;
     font-size: 26px;
@@ -78,7 +77,6 @@
   .timer-box.danger  { color: var(--red);  border-color: rgba(255,77,109,0.4);  background: rgba(255,77,109,0.08); animation: pulse 0.8s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 
-  /* Clase para ocultar el cronómetro (modo menú) */
   .timer-hidden { display: none; }
 
   .progress-wrap {
@@ -108,7 +106,7 @@
     padding: 32px 24px 80px;
   }
 
-  /* ========== MENÚ PRINCIPAL (diseño mejorado) ========== */
+  /* ========== MENÚ PRINCIPAL ========== */
   .menu {
     display: flex;
     flex-direction: column;
@@ -226,7 +224,7 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* Estilos del quiz (sin cambios) */
+  /* ========== ESTILOS DEL QUIZ ========== */
   .question-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -311,7 +309,6 @@
     display: none;
     animation: fadeIn 0.3s ease;
   }
-  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
   .feedback-box.correct {
     display: block;
     background: rgba(46,196,182,0.10);
@@ -479,7 +476,7 @@
       <div class="header-sub">Diccionario General — Administración Pública</div>
     </div>
   </div>
-  <div class="timer-box" id="timer">00:00</div>
+  <div class="timer-box timer-hidden" id="timer">00:00</div>
 </div>
 
 <div class="progress-wrap" id="progressWrap" style="display:none">
@@ -529,7 +526,7 @@
 
 <script>
 // ============================================================
-// BANCO DE PREGUNTAS (60 preguntas únicas con explicaciones detalladas)
+// BANCO DE PREGUNTAS (60 preguntas completas)
 // ============================================================
 const QUESTIONS_BANK = [
   { category: "Estructura General", text: "¿Cuántas competencias conforman el Diccionario General de Competencias y Comportamientos?", options: ["12", "14", "16", "18"], correct: 2, explanation: "Artículo 8 de la Resolución MAP-48-2018: 16 competencias en 4 tipos." },
@@ -609,10 +606,29 @@ const TOPIC_GROUPS = [
   { name: "⚙️ Competencias Directivas y Funcionales", categories: ["Competencias Directivas", "Competencias Funcionales"] }
 ];
 
-let currentQuestions = [], current = 0, userAnswers = [], answered = [], timerInterval = null, secondsRemaining = 0, timeLimitTotal = 0, quizActive = false;
+// ==================== ESTADO GLOBAL ====================
+let currentQuestions = [];
+let current = 0;
+let userAnswers = [];
+let answered = [];
+let timerInterval = null;
+let secondsRemaining = 0;
+let timeLimitTotal = 0;
+let quizActive = false;
 
-function shuffleArray(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
-function getQuestionsByGroup(group) { return QUESTIONS_BANK.filter(q => group.categories.includes(q.category)); }
+// ==================== UTILIDADES ====================
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function getQuestionsByGroup(group) {
+  return QUESTIONS_BANK.filter(q => group.categories.includes(q.category));
+}
+
 function selectRandomQuestions(baseArray, count) {
   const shuffledBase = shuffleArray([...baseArray]);
   const selected = shuffledBase.slice(0, Math.min(count, baseArray.length));
@@ -638,27 +654,197 @@ function startTimer() {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     if (!quizActive) return;
-    if (secondsRemaining <= 0) { clearInterval(timerInterval); timerInterval = null; if (quizActive) showResults(true); }
-    else { secondsRemaining--; updateTimerDisplay(); }
+    if (secondsRemaining <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      if (quizActive) showResults(true);
+    } else {
+      secondsRemaining--;
+      updateTimerDisplay();
+    }
   }, 1000);
 }
-function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
 
-function renderQuestion() { /* igual que antes, se omite por brevedad pero está completo en el código final */ }
-function renderFeedback(userAns, q) { /* ... */ }
-function selectOption(i) { /* ... */ }
-function nextQuestion() { /* ... */ }
-function prevQuestion() { /* ... */ }
-function updateProgress() { /* ... */ }
-function showResults(timeout) { /* ... */ }
-function scrollToReview() { /* ... */ }
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function updateProgress() {
+  const done = answered.filter(a => a).length;
+  const pct = (done / currentQuestions.length) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = `${done} / ${currentQuestions.length}`;
+}
+
+function renderFeedback(userAns, q) {
+  if (userAns === null) return '<div class="feedback-box"></div>';
+  if (userAns === q.correct) {
+    return `<div class="feedback-box correct"><strong>✅ ¡Correcto!</strong> ${q.explanation}</div>`;
+  } else {
+    return `<div class="feedback-box wrong"><strong>❌ Incorrecto</strong> Correcta: <em>${q.options[q.correct]}</em><br><br>${q.explanation}</div>`;
+  }
+}
+
+function renderQuestion() {
+  if (!currentQuestions.length) return;
+  const q = currentQuestions[current];
+  const isAnswered = answered[current];
+  const userAns = userAnswers[current];
+  updateProgress();
+
+  const card = document.getElementById('questionCard');
+  card.innerHTML = `
+    <div class="q-meta">
+      <div class="q-number">Pregunta ${current + 1} de ${currentQuestions.length}</div>
+      <div class="q-category">${q.category}</div>
+    </div>
+    <div class="q-text">${q.text}</div>
+    <div class="options" id="optionsContainer">
+      ${q.options.map((opt, i) => {
+        let cls = 'option';
+        if (isAnswered) {
+          if (i === q.correct) cls += ' correct';
+          else if (i === userAns && userAns !== q.correct) cls += ' wrong';
+        } else if (i === userAns) cls += ' selected';
+        const letters = ['A','B','C','D'];
+        return `<button class="${cls}" onclick="selectOption(${i})" ${isAnswered ? 'disabled' : ''}>
+          <span class="option-letter">${letters[i]}</span>
+          <span>${opt}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    ${isAnswered ? renderFeedback(userAns, q) : '<div class="feedback-box"></div>'}
+  `;
+
+  document.getElementById('prevBtn').disabled = (current === 0);
+  const nextBtn = document.getElementById('nextBtn');
+  if (current === currentQuestions.length - 1) {
+    nextBtn.textContent = 'Ver Resultados 🏆';
+    nextBtn.disabled = !answered.every(a => a);
+  } else {
+    nextBtn.textContent = 'Siguiente →';
+    nextBtn.disabled = !isAnswered;
+  }
+}
+
+function selectOption(i) {
+  if (answered[current] || !quizActive) return;
+  userAnswers[current] = i;
+  answered[current] = true;
+  const nextBtn = document.getElementById('nextBtn');
+  if (current === currentQuestions.length - 1) {
+    nextBtn.disabled = !answered.every(a => a);
+  } else {
+    nextBtn.disabled = false;
+  }
+  renderQuestion();
+}
+
+function nextQuestion() {
+  if (!quizActive) return;
+  if (current < currentQuestions.length - 1) {
+    current++;
+    renderQuestion();
+  } else {
+    showResults(false);
+  }
+}
+
+function prevQuestion() {
+  if (!quizActive) return;
+  if (current > 0) {
+    current--;
+    renderQuestion();
+  }
+}
+
+function showResults(timeout = false) {
+  if (!quizActive) return;
+  stopTimer();
+  quizActive = false;
+  document.getElementById('quizArea').classList.add('hidden');
+  document.getElementById('progressWrap').style.display = 'none';
+  const resultsEl = document.getElementById('results');
+  resultsEl.style.display = 'block';
+  resultsEl.classList.remove('hidden');
+
+  const totalTimeUsed = timeLimitTotal - secondsRemaining;
+  const minutesUsed = Math.floor(totalTimeUsed / 60).toString().padStart(2, '0');
+  const secsUsed = (totalTimeUsed % 60).toString().padStart(2, '0');
+  document.getElementById('timeUsed').textContent = `${minutesUsed}:${secsUsed}`;
+
+  const correct = userAnswers.filter((a, i) => a === currentQuestions[i].correct).length;
+  const wrong = currentQuestions.length - correct;
+  const pct = Math.round((correct / currentQuestions.length) * 100);
+  const circumference = 377;
+  const offset = circumference - (pct / 100) * circumference;
+  setTimeout(() => {
+    const circle = document.getElementById('scoreCircle');
+    if (circle) circle.style.strokeDashoffset = offset;
+  }, 100);
+  document.getElementById('scorePct').textContent = pct + '%';
+  document.getElementById('correctCount').textContent = correct;
+  document.getElementById('wrongCount').textContent = wrong;
+
+  let grade, msg, color;
+  if (timeout) {
+    grade = '⏰ Tiempo agotado';
+    msg = 'Se acabó el tiempo. Puedes volver a intentarlo.';
+    color = 'var(--red)';
+  } else if (pct >= 90) { grade = '🏆 Excelente'; msg = 'Dominio sobresaliente del Diccionario de Competencias'; color = 'var(--teal)'; }
+  else if (pct >= 75) { grade = '🥇 Muy Bueno'; msg = 'Conocimiento sólido, pero sigue practicando'; color = 'var(--green)'; }
+  else if (pct >= 60) { grade = '🥈 Bueno'; msg = 'Buen resultado, repasa las preguntas que fallaste'; color = 'var(--blue-bright)'; }
+  else if (pct >= 50) { grade = '🥉 Aprobado'; msg = 'Aprobaste, pero te recomendamos estudiar más a fondo'; color = 'var(--gold)'; }
+  else { grade = '📚 En Proceso'; msg = 'Te sugerimos revisar el Diccionario General de Competencias'; color = 'var(--red)'; }
+
+  document.getElementById('scoreGrade').textContent = grade;
+  document.getElementById('scoreGrade').style.color = color;
+  document.getElementById('scoreMsg').textContent = msg;
+  document.getElementById('scoreCircle').style.stroke = color;
+
+  const reviewList = document.getElementById('reviewList');
+  const letters = ['A','B','C','D'];
+  reviewList.innerHTML = currentQuestions.map((q, i) => {
+    const isCorrect = userAnswers[i] === q.correct;
+    return `
+      <div class="review-item ${isCorrect ? 'review-correct' : 'review-wrong'}">
+        <div class="review-q-header">
+          <div class="review-num">${i + 1}</div>
+          <div class="review-q-text">${q.text}</div>
+        </div>
+        <div class="review-options">
+          ${q.options.map((opt, j) => {
+            let cls = 'review-opt';
+            let badge = '';
+            if (j === q.correct) {
+              cls += ' opt-correct';
+              badge = `<span class="review-opt-badge badge-correct">✓ Correcta</span>`;
+            } else if (j === userAnswers[i] && !isCorrect) {
+              cls += ' opt-wrong';
+              badge = `<span class="review-opt-badge badge-wrong">Tu respuesta</span>`;
+            }
+            return `<div class="${cls}"><strong style="min-width:18px">${letters[j]}.</strong><span style="flex:1">${opt}</span>${badge}</div>`;
+          }).join('')}
+        </div>
+        ${!isCorrect ? `<div class="explanation"><strong>💡 Explicación:</strong> ${q.explanation}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function scrollToReview() {
+  document.getElementById('reviewSection').scrollIntoView({ behavior: 'smooth' });
+}
 
 function startQuizWithGroup(group, difficultyKey) {
   const setting = difficultySettings[difficultyKey];
   if (!setting) return;
   stopTimer(); quizActive = false;
   const baseQuestions = getQuestionsByGroup(group);
-  if (!baseQuestions.length) return;
+  if (baseQuestions.length === 0) return;
   const selectedRaw = selectRandomQuestions(baseQuestions, setting.questionCount);
   currentQuestions = selectedRaw;
   userAnswers = Array(currentQuestions.length).fill(null);
@@ -707,6 +893,7 @@ function goToMenu() {
   currentQuestions = []; userAnswers = []; answered = [];
 }
 
+// Exponer funciones globales
 window.selectOption = selectOption;
 window.nextQuestion = nextQuestion;
 window.prevQuestion = prevQuestion;
@@ -714,7 +901,6 @@ window.goToMenu = goToMenu;
 window.scrollToReview = scrollToReview;
 
 buildMenu();
-document.getElementById('timer').classList.add('timer-hidden'); // ocultar al inicio
 </script>
 </body>
 </html>
